@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CPMAI Practice Quiz</title>
+<title>CPMAI Adaptive Quiz</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1a2233; min-height: 100vh; display: flex; flex-direction: column; }
@@ -155,11 +155,15 @@
   .total-preview { font-size: 13px; color: #22a06b; font-weight: 600; margin-top: 8px; }
 
   /* ADAPTIVE SIDEBAR */
-  .adaptive-sidebar { background: #131720; border-right: 1px solid #252c3e; padding: 72px 14px 80px; display: flex; flex-direction: column; gap: 14px; position: fixed; top: 0; left: 0; bottom: 0; width: 240px; overflow-y: auto; z-index: 50; }
+  .adaptive-sidebar { display: none; background: #131720; border-right: 1px solid #252c3e; padding: 72px 14px 80px; flex-direction: column; gap: 14px; position: fixed; top: 0; left: 0; bottom: 0; width: 240px; overflow-y: auto; z-index: 50; }
   .sb-section-title { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
   .sb-stat-row { display: flex; flex-direction: column; gap: 4px; }
   .sb-stat { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #1a1f2e; border-radius: 7px; font-size: 13px; }
   .sb-stat .lbl { color: #94a3b8; } .sb-stat .val { font-weight: 700; }
+  /* Sidebar overrides for session buttons (dark bg) */
+  .adaptive-sidebar .sb-session-btn { background: #1a1f2e; border-color: #252c3e; color: #94a3b8; }
+  .adaptive-sidebar .sb-session-btn:hover { border-color: #3b7dd8; color: #3b7dd8; }
+  .adaptive-sidebar .sb-session-btn.active { background: #3b7dd8; border-color: #3b7dd8; color: #fff; }
   .sb-badge { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
   .sb-retry    { background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.2);  color: #ef4444; }
   .sb-new      { background: rgba(79,138,255,.1);  border: 1px solid rgba(79,138,255,.2); color: #4f8aff; }
@@ -168,6 +172,21 @@
   .sb-prog-bar { height: 6px; background: #252c3e; border-radius: 3px; margin-top: 4px; }
   .sb-prog-fill { height: 6px; border-radius: 3px; background: linear-gradient(90deg,#4f8aff,#22c55e); transition: width 0.4s; }
   .sb-session-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .pool-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .pool-filter-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-radius: 8px;
+    border: 1.5px solid #dde3ec; background: #f7f9fc;
+    color: #4a5568; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s; flex: 1; min-width: 120px;
+    font-family: inherit;
+  }
+  .pool-filter-btn:hover { border-color: #3b7dd8; }
+  .pool-filter-btn.active { border-color: #3b7dd8; background: #e8f0fe; color: #1a56db; }
+  .pool-filter-btn .pf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .pool-filter-btn .pf-count { margin-left: auto; font-family: monospace; font-size: 12px; opacity: .7; }
+  .sb-session-btn { padding: 6px 14px; border-radius: 6px; border: 1.5px solid #dde3ec; background: #f7f9fc; color: #4a5568; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .sb-session-btn:hover { border-color: #3b7dd8; color: #3b7dd8; }
   .sb-session-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid #252c3e; background: #1a1f2e; color: #94a3b8; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
   .sb-session-btn.active { background: #3b7dd8; border-color: #3b7dd8; color: #fff; }
   .sb-reset-btn { width: 100%; padding: 8px; border-radius: 7px; border: 1px solid #252c3e; background: transparent; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 4px; }
@@ -182,14 +201,71 @@
   .mastery-prog-bar { height: 6px; background: #dde3ec; border-radius: 3px; }
   .mastery-prog-fill { height: 6px; border-radius: 3px; background: linear-gradient(90deg,#3b7dd8,#22a06b); transition: width 0.4s; }
 
-  @media (max-width: 760px) { .adaptive-sidebar { display: none !important; } .main { margin-left: 0 !important; } }
+  /* ── SIDEBAR VISIBILITY ── */
+  /* Hidden by default; .sidebar-active shows it on desktop */
+  .adaptive-sidebar.sidebar-active { display: flex; }
+
+  /* ── OVERLAY (mobile only) ── */
+  #drawerOverlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 48;
+  }
+  #drawerOverlay.open { display: block; }
+
+  /* ── FAB TOGGLE BUTTON ── */
+  #drawerToggle {
+    display: none; /* hidden until quiz starts on mobile */
+    position: fixed; bottom: 74px; right: 16px; z-index: 200;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #1a2233; border: 2px solid #3b7dd8;
+    color: #fff; font-size: 22px; cursor: pointer;
+    align-items: center; justify-content: center;
+    box-shadow: 0 3px 14px rgba(0,0,0,.5);
+  }
+
+  /* ── MOBILE: sidebar as slide-in drawer ── */
+  @media (max-width: 760px) {
+    .main { margin-left: 0 !important; }
+
+    /* When active on mobile: position off-screen, slide in when open */
+    .adaptive-sidebar.sidebar-active {
+      display: flex;
+      transform: translateX(-100%);
+      transition: transform 0.28s ease;
+      box-shadow: 6px 0 24px rgba(0,0,0,.6);
+      z-index: 49;
+    }
+    .adaptive-sidebar.sidebar-active.drawer-open {
+      transform: translateX(0);
+    }
+
+    /* Show FAB only on mobile when sidebar is active */
+    .adaptive-sidebar.sidebar-active ~ #drawerToggle,
+    #drawerToggle.visible {
+      display: flex;
+    }
+  }
+
+  /* Desktop: hide FAB and overlay */
+  @media (min-width: 761px) {
+    #drawerToggle { display: none !important; }
+    #drawerOverlay { display: none !important; }
+    .adaptive-sidebar.sidebar-active {
+      transform: none !important;
+    }
+  }
   @media (max-width: 600px) { .card { padding: 24px 18px; } .nav-grid { grid-template-columns: repeat(7,1fr); } .topbar .meta { display: none; } }
 </style>
 </head>
 <body>
 
+<div id="drawerOverlay" onclick="closeDrawer()"></div>
+<button id="drawerToggle" onclick="toggleDrawer()" title="Stats">&#129504;</button>
+
 <!-- ADAPTIVE SIDEBAR -->
-<div id="adaptiveSidebar" class="adaptive-sidebar" style="display:none;">
+<div id="adaptiveSidebar" class="adaptive-sidebar">
   <div style="color:#e2e8f0;font-weight:800;font-size:14px;padding-bottom:12px;border-bottom:1px solid #252c3e;">&#129504; CPMAI Adaptive</div>
   <div><div class="sb-section-title">Session</div><div class="sb-stat-row" id="sb-stats"></div></div>
   <div><div class="sb-section-title">Mastery</div><div id="sb-mastery"></div></div>
@@ -202,26 +278,43 @@
 <!-- SETUP SCREEN -->
 <div class="setup-screen" id="setupScreen">
   <div class="setup-card">
-    <h1>CPMAI Practice Quiz</h1>
-    <p class="sub">746 unique questions across 5 domains</p>
-    <div class="setup-section">
-      <label>Number of Questions</label>
-      <div class="setup-row">
-        <input type="number" class="setup-input" id="numQInput" value="120" min="10" max="746">
-        <span style="font-size:13px;color:#6b7c93;">of 746 available</span>
-      </div>
-      <p class="total-preview" id="totalPreview">120 questions selected</p>
-    </div>
+    <h1>&#129504; CPMAI Adaptive Quiz</h1>
+    <p class="sub">746 questions · spaced repetition · mastery tracking</p>
     <div class="setup-section">
       <label>Domains</label>
       <div class="domain-checkboxes" id="domainChecks"></div>
     </div>
     <div class="setup-section">
-      <label>Mode</label>
-      <div class="setup-row" style="flex-direction:column;gap:8px;">
-        <label class="domain-check"><input type="radio" name="mode" value="practice" checked> Practice (see answers immediately)</label>
-        <label class="domain-check"><input type="radio" name="mode" value="exam"> Exam (see results at end)</label>
-        <label class="domain-check"><input type="radio" name="mode" value="adaptive"> &#129504; Adaptive (tracks mastery, repeats wrong answers)</label>
+      <label>Question Pool</label>
+      <div class="pool-filter-row" id="poolFilterRow">
+        <button type="button" class="pool-filter-btn active" data-pool="all" onclick="setPoolFilter('all')">
+          <span class="pf-dot" style="background:#3b7dd8"></span> All
+          <span class="pf-count" id="pfc-all">746</span>
+        </button>
+        <button type="button" class="pool-filter-btn" data-pool="new" onclick="setPoolFilter('new')">
+          <span class="pf-dot" style="background:#f59e0b"></span> New
+          <span class="pf-count" id="pfc-new">0</span>
+        </button>
+        <button type="button" class="pool-filter-btn" data-pool="wrong" onclick="setPoolFilter('wrong')">
+          <span class="pf-dot" style="background:#ef4444"></span> Wrong
+          <span class="pf-count" id="pfc-wrong">0</span>
+        </button>
+        <button type="button" class="pool-filter-btn" data-pool="correct" onclick="setPoolFilter('correct')">
+          <span class="pf-dot" style="background:#22c55e"></span> Correct
+          <span class="pf-count" id="pfc-correct">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="setup-section">
+      <label>Questions per Session</label>
+      <div class="setup-row">
+        <select id="sessionLimitSelect" class="setup-input" style="width:160px;cursor:pointer;" onchange="setupSessionLimit=parseInt(this.value)">
+          <option value="0">&#8734; Unlimited</option>
+          <option value="10">10 questions</option>
+          <option value="20" selected>20 questions</option>
+          <option value="30">30 questions</option>
+          <option value="50">50 questions</option>
+        </select>
       </div>
     </div>
     <div class="setup-section">
@@ -234,17 +327,18 @@
           <button type="button" id="syncDisconnectBtn" onclick="syncDisconnect()" style="padding:8px 16px;border-radius:7px;border:1px solid #374151;background:transparent;color:#94a3b8;font-weight:600;cursor:pointer;display:none;">Disconnect</button>
           <span id="syncStatus" style="font-size:12px;color:#64748b;">Not connected</span>
         </div>
-        <p style="font-size:11px;color:#6b7c93;margin:0;line-height:1.5;">Adaptive progress syncs across devices via a private GitHub Gist (free, no request limits). Setup: github.com &#8594; Settings &#8594; Developer settings &#8594; Personal access tokens &#8594; <b>Tokens (classic)</b> &#8594; Generate new token with only the <b>gist</b> scope. Connect here once; on other devices paste the same token <b>and the Gist ID</b> shown after connecting.</p>
+        <p style="font-size:11px;color:#6b7c93;margin:0;line-height:1.5;">Progress syncs across devices via a private GitHub Gist (free). Setup: github.com → Settings → Developer settings → Personal access tokens → <b>Tokens (classic)</b> → Generate with only the <b>gist</b> scope.</p>
       </div>
     </div>
-    <button class="btn btn-start" onclick="startQuiz()">Start Quiz</button>
+    <button class="btn btn-start" onclick="startQuiz()">Start Adaptive Quiz</button>
+    <p class="total-preview" id="totalPreview" style="text-align:center;margin-top:10px;"></p>
   </div>
 </div>
 
 <!-- QUIZ SCREEN -->
 <div id="quizScreen" style="display:none; flex-direction:column; min-height:100vh;">
   <div class="topbar">
-    <span class="title">CPMAI Practice Quiz</span>
+    <span class="title">&#129504; CPMAI Adaptive Quiz</span>
     <span class="meta" id="topMeta">Question 1 of 120</span>
     <div class="timer-wrap" id="timerWrap">
       <svg class="timer-ring" viewBox="0 0 36 36" id="timerRing">
@@ -388,44 +482,67 @@ function buildSetup() {
     `<label class="domain-check"><input type="checkbox" class="domain-cb" value="${d}" checked>
      ${d} <span style="color:#6b7c93;font-size:12px;">(${counts[d]||0})</span></label>`
   ).join('');
-  document.getElementById('numQInput').addEventListener('input', updatePreview);
-  document.querySelectorAll('.domain-cb').forEach(cb => cb.addEventListener('change', updatePreview));
+  document.querySelectorAll('.domain-cb').forEach(cb => cb.addEventListener('change', () => { updatePreview(); updatePoolCounts(); }));
   updatePreview();
+  updatePoolCounts();
 }
 function updatePreview() {
   const sel = getSelectedDomains();
   const pool = ALL_QUESTIONS.filter(q => sel.includes(q.domain));
-  const n = Math.min(parseInt(document.getElementById('numQInput').value)||0, pool.length);
-  const totalSecs = n * 70, mins = Math.floor(totalSecs/60), rem = totalSecs % 60;
-  const timeStr = rem > 0 ? mins+'m '+rem+'s' : mins+' min';
-  document.getElementById('totalPreview').textContent = n+' questions · Total time: '+timeStr;
+  document.getElementById('totalPreview').textContent = pool.length + ' questions available across selected domains';
 }
 function getSelectedDomains() {
   return [...document.querySelectorAll('.domain-cb:checked')].map(cb => cb.value);
 }
 
-// ── Start Quiz ──
+// ── Setup session limit picker ──
+let setupSessionLimit = 20;
+let setupPoolFilter = 'all'; // all | new | wrong | correct
+function setSessionLimitSetup(n) {
+  setupSessionLimit = n;
+  [0,10,20,30,50].forEach(v => {
+    const btn = document.getElementById('sl-'+v);
+    if (btn) btn.classList.toggle('active', v === n);
+  });
+}
+
+// ── Pool Filter ──
+function setPoolFilter(f) {
+  setupPoolFilter = f;
+  document.querySelectorAll('.pool-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.pool === f);
+  });
+}
+function updatePoolCounts() {
+  adpLoadHistory();
+  const sel = getSelectedDomains();
+  const pool = ALL_QUESTIONS.filter(q => sel.includes(q.domain));
+  const counts = { all: pool.length, new: 0, wrong: 0, correct: 0 };
+  pool.forEach(q => {
+    const s = adpGetStatus(q.id);
+    if (s === 'new') counts.new++;
+    else if (s === 'retry') counts.wrong++;
+    else counts.correct++;
+  });
+  ['all','new','wrong','correct'].forEach(k => {
+    const el = document.getElementById('pfc-'+k);
+    if (el) el.textContent = counts[k];
+  });
+  // Disable buttons with 0 questions
+  document.querySelectorAll('.pool-filter-btn').forEach(btn => {
+    const k = btn.dataset.pool;
+    const n = counts[k] || 0;
+    btn.disabled = n === 0;
+    btn.style.opacity = n === 0 ? '.4' : '1';
+    if (n === 0 && setupPoolFilter === k) setPoolFilter('all');
+  });
+}
+
+// ── Start Quiz (always adaptive) ──
 function startQuiz() {
   const selectedDomains = getSelectedDomains();
   if (!selectedDomains.length) { alert('Please select at least one domain.'); return; }
-  const pool = ALL_QUESTIONS.filter(q => selectedDomains.includes(q.domain));
-  const n = Math.min(parseInt(document.getElementById('numQInput').value)||120, pool.length);
-  if (n < 1) { alert('No questions available.'); return; }
-  quizMode = document.querySelector('input[name="mode"]:checked').value;
-  if (quizMode === 'adaptive') { startAdaptiveMode(selectedDomains); return; }
-  questions = [...pool].sort(() => Math.random()-0.5).slice(0, n);
-  answers = {}; skipped = {}; currentIdx = 0; submitted = false; isPaused = false;
-  document.getElementById('setupScreen').style.display = 'none';
-  document.getElementById('quizScreen').style.display = 'flex';
-  document.getElementById('resultsScreen').style.display = 'none';
-  document.getElementById('resultsScreen').classList.remove('visible');
-  document.getElementById('adaptiveSidebar').style.display = 'none';
-  document.getElementById('mainContent').style.marginLeft = '';
-  document.getElementById('timerWrap').style.display = '';
-  document.getElementById('btnPrev').style.display = '';
-  document.getElementById('btnNav').style.display = '';
-  renderQuestion();
-  startTimer();
+  startAdaptiveMode(selectedDomains);
 }
 
 // ── Render question ──
@@ -562,7 +679,7 @@ function reviewAnswers() {
 }
 function restartQuiz() {
   stopTimer();
-  document.getElementById('adaptiveSidebar').style.display='none';
+  document.getElementById('adaptiveSidebar').classList.remove('sidebar-active');
   document.getElementById('mainContent').style.marginLeft='';
   document.getElementById('timerWrap').style.display='';
   const adpBtn=document.getElementById('adpActionBtn'); if(adpBtn) adpBtn.remove();
@@ -582,6 +699,7 @@ const ADP_LS_KEY = 'cpmai_adaptive_v2';
 const ADP_W = { retry:12, new:6, shaky:4, learning:2, mastered:1 };
 let adpHistory={}, adpPool=[], adpSessionCorrect=0, adpSessionWrong=0, adpSessionQ=0;
 let adpCurrentQ=null, adpAnswered=false, adpSelected=null, adpSessionLimit=0, adpResultFilter='all';
+let adpSeenThisSession=new Set(); // tracks IDs answered in current session
 
 function adpLoadHistory() { try { const r=localStorage.getItem(ADP_LS_KEY); if(r) adpHistory=JSON.parse(r); } catch(e){} }
 function adpSaveHistory() { try { localStorage.setItem(ADP_LS_KEY, JSON.stringify(adpHistory)); } catch(e){} syncPushDebounced(); }
@@ -641,7 +759,7 @@ async function syncPull(){
   for(const id in remote){ const r=remote[id], l=adpHistory[id]; if(!l||(r.t||0)>(l.t||0)){ adpHistory[id]=r; merged=true; } }
   if(merged){ try{ localStorage.setItem(ADP_LS_KEY, JSON.stringify(adpHistory)); }catch(e){} }
   syncStatus('Synced '+new Date().toLocaleTimeString(),'#22a06b');
-  if(document.getElementById('adaptiveSidebar').style.display!=='none') adpRenderSidebar();
+  if(document.getElementById('adaptiveSidebar').classList.contains('sidebar-active')) adpRenderSidebar();
 }
 function syncPushDebounced(){
   if(!syncCfg) return;
@@ -694,11 +812,11 @@ function adpRenderSidebar() {
   const newN=all.filter(q=>adpGetStatus(q.id)==='new').length;
   const shakyN=all.filter(q=>['shaky','learning'].includes(adpGetStatus(q.id))).length;
   const pct=all.length?Math.round(mastN/all.length*100):0;
-  const acc=adpSessionQ?Math.round(adpSessionCorrect/adpSessionQ*100):0;
+  const acc=adpSessionCount?Math.round(adpSessionCorrect/adpSessionCount*100):0;
   document.getElementById('sb-stats').innerHTML=
     '<div class="sb-stat"><span class="lbl">Correct</span><span class="val" style="color:#22c55e">'+adpSessionCorrect+'</span></div>'+
     '<div class="sb-stat"><span class="lbl">Wrong</span><span class="val" style="color:#ef4444">'+adpSessionWrong+'</span></div>'+
-    '<div class="sb-stat"><span class="lbl">Answered</span><span class="val">'+adpSessionQ+(adpSessionLimit>0?' / '+adpSessionLimit:'')+'</span></div>'+
+    '<div class="sb-stat"><span class="lbl">Answered</span><span class="val">'+adpSessionCount+(adpSessionLimit>0?' / '+adpSessionLimit:'')+'</span></div>'+
     '<div class="sb-stat"><span class="lbl">Accuracy</span><span class="val" style="color:#4f8aff">'+acc+'%</span></div>';
   document.getElementById('sb-mastery').innerHTML=
     '<div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px"><span>Mastery</span><span style="color:#22c55e;font-weight:700">'+pct+'%</span></div>'+
@@ -708,18 +826,26 @@ function adpRenderSidebar() {
     '<div class="sb-badge sb-new">&#10024; New <span>'+newN+'</span></div>'+
     '<div class="sb-badge sb-shaky">&#9889; Shaky <span>'+shakyN+'</span></div>'+
     '<div class="sb-badge sb-mastered">&#127942; Mastered <span>'+mastN+'</span></div></div>';
-  document.getElementById('sb-session-btns').innerHTML=[0,10,20,30,40,50].map(n=>
+  document.getElementById('sb-session-btns').innerHTML=[0,10,20,30,50].map(n=>
     '<button class="sb-session-btn'+(adpSessionLimit===n?' active':'')+'" onclick="adpSetSessionLimit('+n+')">'+(n===0?'&#8734;':n)+'</button>').join('');
-  const filters=[{k:'all',l:'All'},{k:'wrong',l:'Wrong'},{k:'new',l:'New'},{k:'correct',l:'Correct'}];
+  const retryN2 =adpPool.filter(q=>adpGetStatus(q.id)==='retry').length;
+  const newN2   =adpPool.filter(q=>adpGetStatus(q.id)==='new').length;
+  const correctN=adpPool.filter(q=>['shaky','learning','mastered'].includes(adpGetStatus(q.id))).length;
+  const filters=[
+    {k:'all',    l:'All',     n:adpPool.length},
+    {k:'wrong',  l:'Retry',   n:retryN2},
+    {k:'new',    l:'New',     n:newN2},
+    {k:'correct',l:'Correct', n:correctN}
+  ];
   document.getElementById('sb-filter').innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px;">'+
-    filters.map(f=>'<button class="sb-session-btn'+(adpResultFilter===f.k?' active':'')+'" data-fk="'+f.k+'" onclick="adpSetFilter(this.dataset.fk)">'+f.l+'</button>').join('')+'</div>';
+    filters.map(f=>'<button class="sb-session-btn'+(adpResultFilter===f.k?' active':'')+'" data-fk="'+f.k+'" onclick="adpSetFilter(this.dataset.fk)">'+f.l+' <span style="opacity:.7;font-size:11px;">'+f.n+'</span></button>').join('')+'</div>';
 }
-function adpSetSessionLimit(n) { adpSessionLimit=n; adpRenderSidebar(); }
-function adpSetFilter(f) { adpResultFilter=f; adpRenderSidebar(); adpLoadQuestion(); }
+function adpSetSessionLimit(n) { adpSessionLimit=n; adpSessionCount=0; adpSeenThisSession=new Set(); adpRenderSidebar(); }
+function adpSetFilter(f) { adpResultFilter=f; adpRenderSidebar(); adpLoadQuestion(); closeDrawer(); }
 
 function adpLoadQuestion() {
   adpSelected=null; adpAnswered=false;
-  if (adpSessionLimit>0 && adpSessionQ>=adpSessionLimit) { adpShowSessionEnd(); return; }
+  if (adpSessionLimit>0 && adpSessionCount>=adpSessionLimit) { adpShowSessionEnd(); return; }
   const q=adpPickNext();
   if (!q) {
     document.getElementById('qText').textContent='All questions in this filter are mastered!';
@@ -735,8 +861,20 @@ function adpLoadQuestion() {
 function adpRenderQuestion(q) {
   adpCurrentQ=q; adpAnswered=false; adpSelected=null;
   const h=adpHistory[q.id]||{a:0,w:0,s:0}, status=adpGetStatus(q.id);
-  const banners={retry:{cls:'pb-retry',icon:'&#128257;',txt:'Wrong '+h.w+'&#215; — repeating until correct'},new:{cls:'pb-new',icon:'&#10024;',txt:'First time — new question'},shaky:{cls:'pb-shaky',icon:'&#9889;',txt:'Correct '+h.s+'&#215; — keep practising'},learning:{cls:'pb-shaky',icon:'&#128200;',txt:h.s+' correct in a row'},mastered:{cls:'pb-mastered',icon:'&#127942;',txt:'Mastered ('+h.s+'&#215; streak)'}};
-  const bc=banners[status]||banners.new;
+  // Determine effective display status for banner
+  const seenNow = adpSeenThisSession.has(q.id);
+  let displayStatus = status;
+  // If not yet answered this session, don't show 'retry' — show 'needs_review' instead
+  if (status==='retry' && !seenNow) displayStatus='needs_review';
+  const banners={
+    retry:       {cls:'pb-retry',    icon:'&#128257;', txt:'Wrong this session — try again'},
+    needs_review:{cls:'pb-shaky',    icon:'&#128256;', txt:'Needs review — got wrong before'},
+    new:         {cls:'pb-new',      icon:'&#10024;',  txt:'First time — new question'},
+    shaky:       {cls:'pb-shaky',    icon:'&#9889;',   txt:'Correct '+h.s+'&#215; — keep going'},
+    learning:    {cls:'pb-shaky',    icon:'&#128200;', txt:h.s+' correct in a row'},
+    mastered:    {cls:'pb-mastered', icon:'&#127942;', txt:'Mastered ('+h.s+'&#215; streak)'}
+  };
+  const bc=banners[displayStatus]||banners.new;
   const pool=adpGetPool(), mastN=pool.filter(q2=>adpGetStatus(q2.id)==='mastered').length, pct=pool.length?(mastN/pool.length*100).toFixed(0):0;
   document.getElementById('qNumber').textContent='Question '+(adpSessionQ+1);
   document.getElementById('qTypeBadge').textContent=q.type||'Multiple Choice';
@@ -791,7 +929,8 @@ function adpSubmitAnswer() {
   adpAnswered=true;
   const q=adpCurrentQ, corr=String(q.correct).split(','), sel=Array.isArray(adpSelected)?adpSelected:[adpSelected];
   const wasOk=corr.length===sel.length&&corr.every(c=>sel.includes(c));
-  adpSessionQ++; if(wasOk) adpSessionCorrect++; else adpSessionWrong++;
+  adpSeenThisSession.add(q.id);
+  adpSessionQ++; adpSessionCount++; if(wasOk) adpSessionCorrect++; else adpSessionWrong++;
   if (!adpHistory[q.id]) adpHistory[q.id]={a:0,w:0,s:0,t:0};
   const h=adpHistory[q.id]; h.a++; h.t=Date.now();
   if (wasOk) h.s++; else { h.w++; h.s=0; }
@@ -812,31 +951,128 @@ function adpSubmitAnswer() {
   adpRenderSidebar();
 }
 function adpShowSessionEnd() {
-  const pct=adpSessionQ?Math.round(adpSessionCorrect/adpSessionQ*100):0;
-  document.getElementById('qText').textContent='Session complete! '+adpSessionQ+' questions · '+pct+'% accuracy';
-  document.getElementById('choicesContainer').innerHTML='';
-  document.querySelector('.card').querySelectorAll('.priority-banner,.mastery-prog-wrap').forEach(e=>e.remove());
-  const btn=document.getElementById('adpActionBtn');
-  btn.textContent='New Session'; btn.style.background='#3b7dd8'; btn.disabled=false;
-  btn.onclick=()=>{ adpSessionCorrect=0; adpSessionWrong=0; adpSessionQ=0; adpLoadQuestion(); };
+  // Hide quiz screen, show results screen
+  document.getElementById('quizScreen').style.display='none';
+  const rs = document.getElementById('resultsScreen');
+  rs.style.display='flex'; rs.classList.add('visible');
+
+  const total = adpSessionCount;
+  const correct = adpSessionCorrect;
+  const pct = total ? Math.round(correct/total*100) : 0;
+  const pass = pct >= 70;
+
+  document.getElementById('resultsTitle').textContent = pass ? 'Session Complete! 🎉' : 'Session Complete';
+  document.getElementById('resultsSubtitle').textContent = correct+' correct out of '+total+' questions · '+pct+'% accuracy';
+  document.getElementById('scorePct').textContent = pct+'%';
+  document.getElementById('scoreLabel').textContent = correct+' / '+total;
+  document.getElementById('scoreCircle').className = 'score-circle '+(pass?'score-pass':'score-fail');
+
+  // Domain breakdown for this session
+  const domainStats={};
+  DOMAINS.forEach(d=>{domainStats[d]={correct:0,total:0};});
+  adpSeenThisSession.forEach(id=>{
+    const q=ALL_QUESTIONS.find(q=>q.id===id);
+    if(!q) return;
+    const d=q.domain;
+    if(!domainStats[d]) domainStats[d]={correct:0,total:0};
+    domainStats[d].total++;
+    const h=adpHistory[id];
+    // If last answer was correct (s incremented), count as correct
+    if(h && h.s>0) domainStats[d].correct++;
+  });
+  document.getElementById('domainBreakdown').innerHTML=Object.entries(domainStats)
+    .filter(([,s])=>s.total>0)
+    .map(([d,s])=>{
+      const p=s.total?Math.round(s.correct/s.total*100):0;
+      const short=d.replace(/Domain \d+: /,'');
+      return '<div class="domain-row"><span class="domain-name">'+short+'</span>'+
+        '<div class="domain-bar-wrap"><div class="domain-bar" style="width:'+p+'%;background:'+(p>=70?'#22a06b':'#e5534b')+'"></div></div>'+
+        '<span class="domain-pct">'+p+'%</span></div>';
+    }).join('');
+
+  // Mastery summary
+  const mastN=adpPool.filter(q=>adpGetStatus(q.id)==='mastered').length;
+  const mastPct=adpPool.length?Math.round(mastN/adpPool.length*100):0;
+  const extraInfo=document.createElement('div');
+  extraInfo.style.cssText='margin:16px 0;padding:12px 16px;background:#f0f9ff;border-radius:8px;font-size:13px;color:#2d3f55;text-align:center;';
+  extraInfo.innerHTML='Overall mastery: <strong>'+mastPct+'%</strong> ('+mastN+' / '+adpPool.length+' questions mastered)';
+  const breakdown=document.querySelector('.domain-breakdown');
+  if(breakdown && !document.getElementById('mastSummary')) {
+    extraInfo.id='mastSummary';
+    breakdown.before(extraInfo);
+  }
+
+  // Replace Review Answers button with New Session
+  const actions=document.querySelector('.results-actions');
+  actions.innerHTML=
+    '<button class="btn btn-primary btn-start" onclick="adpNewSession()" style="width:auto;padding:12px 24px;font-size:14px;">▶ New Session</button>'+
+    '<button class="btn btn-outline" onclick="restartQuiz()" style="border-color:#dde3ec;color:#2d3f55;width:auto;padding:12px 24px;font-size:14px;">⚙ Change Settings</button>';
+}
+
+function adpNewSession() {
+  // Hide results, show quiz
+  document.getElementById('resultsScreen').style.display='none';
+  document.getElementById('resultsScreen').classList.remove('visible');
+  document.getElementById('quizScreen').style.display='flex';
+  // Remove mastSummary so it doesn't duplicate next time
+  const ms=document.getElementById('mastSummary'); if(ms) ms.remove();
+  // Reset session counters
+  adpSessionCorrect=0; adpSessionWrong=0; adpSessionCount=0;
+  adpSeenThisSession=new Set();
+  adpRenderSidebar();
+  adpLoadQuestion();
 }
 function resetAdaptiveHistory() {
-  if (!confirm('Reset all adaptive progress?')) return;
-  adpHistory={}; adpSaveHistory();
-  adpSessionCorrect=0; adpSessionWrong=0; adpSessionQ=0;
-  adpRenderSidebar(); adpLoadQuestion();
+  // window.confirm is blocked in Android Chrome on local files — use inline confirm
+  const btn = document.querySelector('.sb-reset-btn');
+  if (btn && btn.dataset.confirming === '1') {
+    // Second tap = confirmed
+    adpHistory={}; adpSaveHistory();
+    adpSessionCorrect=0; adpSessionWrong=0; adpSessionQ=0; adpSessionCount=0;
+    adpSeenThisSession=new Set();
+    btn.textContent='↺ Reset Progress';
+    btn.dataset.confirming='0';
+    btn.style.borderColor='';
+    btn.style.color='';
+    adpRenderSidebar(); adpLoadQuestion();
+  } else if (btn) {
+    // First tap = ask for confirmation
+    btn.textContent='Tap again to confirm reset';
+    btn.dataset.confirming='1';
+    btn.style.borderColor='#ef4444';
+    btn.style.color='#ef4444';
+    setTimeout(()=>{
+      if(btn.dataset.confirming==='1'){
+        btn.textContent='↺ Reset Progress';
+        btn.dataset.confirming='0';
+        btn.style.borderColor='';
+        btn.style.color='';
+      }
+    }, 3000);
+  }
 }
 function startAdaptiveMode(selectedDomains) {
   adpLoadHistory();
   if (syncCfg) syncPull().catch(()=>syncStatus('Sync pull failed','#ef4444'));
-  adpSessionCorrect=0; adpSessionWrong=0; adpSessionQ=0;
+  adpSessionCorrect=0; adpSessionWrong=0; adpSessionQ=0; adpSessionCount=0;
+  adpSeenThisSession=new Set();
   adpSelected=null; adpAnswered=false;
-  adpPool=ALL_QUESTIONS.filter(q=>selectedDomains.includes(q.domain));
+  const sel = document.getElementById('sessionLimitSelect');
+  adpSessionLimit = sel ? parseInt(sel.value) : setupSessionLimit;
+  adpPool=ALL_QUESTIONS.filter(q=>{
+    if (!selectedDomains.includes(q.domain)) return false;
+    const s = adpGetStatus(q.id);
+    if (setupPoolFilter === 'new')     return s === 'new';
+    if (setupPoolFilter === 'wrong')   return s === 'retry';
+    if (setupPoolFilter === 'correct') return s === 'shaky' || s === 'learning' || s === 'mastered';
+    return true; // 'all'
+  });
+  if (adpPool.length === 0) { alert('No questions in selected pool. Try a different filter.'); document.getElementById('setupScreen').style.display=''; return; }
   document.getElementById('setupScreen').style.display='none';
   document.getElementById('resultsScreen').style.display='none';
   document.getElementById('resultsScreen').classList.remove('visible');
   document.getElementById('quizScreen').style.display='flex';
-  document.getElementById('adaptiveSidebar').style.display='flex';
+  document.getElementById('adaptiveSidebar').classList.add('sidebar-active');
   document.getElementById('mainContent').style.marginLeft='240px';
   document.getElementById('timerWrap').style.display='none';
   document.getElementById('btnPrev').style.display='none';
@@ -845,7 +1081,30 @@ function startAdaptiveMode(selectedDomains) {
   document.getElementById('btnSubmit').style.display='none';
   stopTimer();
   adpRenderSidebar();
+  showDrawerBtn();
   adpLoadQuestion();
+}
+
+// ── Mobile Drawer ──
+function toggleDrawer() {
+  const sb = document.getElementById('adaptiveSidebar');
+  const ov = document.getElementById('drawerOverlay');
+  const isOpen = sb.classList.contains('drawer-open');
+  if (!isOpen) {
+    sb.classList.add('drawer-open');
+    ov.classList.add('open');
+  } else {
+    sb.classList.remove('drawer-open');
+    ov.classList.remove('open');
+  }
+}
+function closeDrawer() {
+  document.getElementById('adaptiveSidebar').classList.remove('drawer-open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+function showDrawerBtn() {
+  const btn = document.getElementById('drawerToggle');
+  if (btn) btn.classList.add('visible');
 }
 
 // Init
