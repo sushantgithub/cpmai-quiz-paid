@@ -79,6 +79,16 @@
   .explanation.visible { display: block; }
   .explanation h4 { font-size: 13px; font-weight: 700; color: #3b7dd8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
   .explanation p { font-size: 14px; line-height: 1.7; color: #2d3f55; }
+  /* Structured explanation blocks */
+  .exp-intro { font-size: 14px; line-height: 1.7; color: #2d3f55; margin-bottom: 12px; }
+  .exp-block { border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 10px; font-size: 14px; line-height: 1.7; }
+  .exp-block:last-child { margin-bottom: 0; }
+  .exp-correct { background: #e9f7f0; border-left: 4px solid #22a06b; color: #1e4636; }
+  .exp-incorrect { background: #fdf1f0; border-left: 4px solid #e5534b; color: #55302d; }
+  .exp-tag { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .exp-correct .exp-tag { color: #1a8058; }
+  .exp-incorrect .exp-tag { color: #c94039; }
+  .exp-sub { font-size: 12px; font-weight: 700; color: #6b7c93; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
 
   /* PROGRESS BAR */
   .progress-bar-wrap { height: 4px; background: #dde3ec; position: fixed; top: 52px; left: 0; right: 0; z-index: 99; }
@@ -363,7 +373,7 @@
       <div class="choices" id="choicesContainer"></div>
       <div class="explanation" id="explanation">
         <h4>Explanation</h4>
-        <p id="explanationText"></p>
+        <div id="explanationText"></div>
       </div>
     </div>
   </div>
@@ -578,8 +588,120 @@ function renderQuestion() {
   });
   applyChoiceStates();
   const expDiv = document.getElementById('explanation');
-  document.getElementById('explanationText').textContent = q.explanation||'';
+  renderExplanation(q);
   expDiv.classList.toggle('visible', quizMode==='practice' && answers[currentIdx]!==undefined);
+}
+
+/* ---- Structured explanation rendering ---- */
+function parseExplanation(text, q) {
+  if (!text) return null;
+  // Split only at [.!?] followed by whitespace and a sentence-start character,
+  // so decimals (0.7), abbreviations (U.S., e.g.) and versions stay intact.
+  const sentences = [];
+  const splitRe = /[.!?]+["\u201d')\]]*\s+(?=[A-Z\u201c"(\[0-9])/g;
+  let prev = 0, sm;
+  while ((sm = splitRe.exec(text)) !== null) {
+    sentences.push(text.slice(prev, sm.index + sm[0].length));
+    prev = splitRe.lastIndex;
+  }
+  if (prev < text.length) sentences.push(text.slice(prev));
+  const choices = (q && q.choices) ? q.choices : {};
+  const toks = x => String(x).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+  const choiceToks = {};
+  Object.keys(choices).forEach(L => { choiceToks[L] = toks(choices[L]); });
+  // A sentence starts a new block only if it asserts an option is correct/incorrect
+  // AND the text before the marker resembles one of the answer choices (or is short).
+  function boundaryInfo(s) {
+    const m = s.match(/^(.*?)\b(is|are|was|were|being|would be)\s+(also\s+)?(correct|incorrect|not possible)\b/i);
+    if (!m) return null;
+    const after = s.slice(m[0].length);
+    if (/^\s*,?\s*(but|yet)\b/i.test(after)) return null;
+    const bad = /incorrect|not possible/i.test(m[4]);
+    const preToks = toks(m[1]);
+    const preNorm = preToks.join(' ');
+    let best = null, bestScore = 0;
+    Object.keys(choiceToks).forEach(L => {
+      const ct = choiceToks[L];
+      if (!ct.length) return;
+      if (preNorm === ct.join(' ')) { bestScore = 2; best = L; return; }
+      if (bestScore >= 2) return;
+      const hit = ct.filter(w => preToks.indexOf(w) !== -1).length / ct.length;
+      if (hit > bestScore) { bestScore = hit; best = L; }
+    });
+    if (bestScore >= 2) return { bad: bad, letter: best };
+    if (bestScore >= 0.6 && preToks.length <= (choiceToks[best] || []).length * 1.5 + 3) return { bad: bad, letter: best };
+    if (preToks.length <= 8) return { bad: bad, letter: bestScore >= 0.6 ? best : null };
+    return null;
+  }
+  const blocks = []; let cur = null; const intro = [];
+  sentences.forEach(s => {
+    const t = s.trim(); if (!t) return;
+    const b = boundaryInfo(t);
+    if (b) {
+      if (cur) blocks.push(cur);
+      cur = { correct: !b.bad, letter: b.letter, text: [t] };
+    } else if (cur) cur.text.push(t);
+    else intro.push(t);
+  });
+  if (cur) blocks.push(cur);
+  if (!blocks.length) return null;
+  let introText = intro.join(' ');
+  // If the correct-answer portion never matched a boundary, treat the intro as the correct block.
+  if (!blocks.some(b => b.correct) && introText) {
+    blocks.unshift({ correct: true, letter: null, text: [introText] });
+    introText = '';
+  }
+  // Fill in the correct option letter from the answer key when unmatched,
+  // and drop any matched letter that contradicts the answer key.
+  const correctLetters = String((q && q.correct) || '').split(',').map(x => x.trim()).filter(Boolean);
+  blocks.forEach(b => {
+    if (!b.letter || !correctLetters.length) return;
+    const inKey = correctLetters.indexOf(b.letter) !== -1;
+    if (b.correct !== inKey) b.letter = null;
+  });
+  const corrBlocks = blocks.filter(b => b.correct);
+  if (corrBlocks.length === 1 && correctLetters.length === 1 && !corrBlocks[0].letter) corrBlocks[0].letter = correctLetters[0];
+  return { intro: introText, blocks: blocks };
+}
+function buildExpBlock(b, ok) {
+  const d = document.createElement('div');
+  d.className = 'exp-block ' + (ok ? 'exp-correct' : 'exp-incorrect');
+  const tag = document.createElement('span');
+  tag.className = 'exp-tag';
+  tag.textContent = (ok ? '\u2713 Correct answer' : '\u2717 Incorrect') + (b.letter ? ' \u2014 Option ' + b.letter : '');
+  d.appendChild(tag);
+  const body = document.createElement('span');
+  body.textContent = b.text.join(' ');
+  d.appendChild(body);
+  return d;
+}
+function renderExplanation(q) {
+  const el = document.getElementById('explanationText');
+  const parsed = parseExplanation(q.explanation || '', q);
+  el.innerHTML = '';
+  if (!parsed) {
+    const d = document.createElement('div');
+    d.className = 'exp-intro';
+    d.textContent = q.explanation || '';
+    el.appendChild(d);
+    return;
+  }
+  if (parsed.intro) {
+    const d = document.createElement('div');
+    d.className = 'exp-intro';
+    d.textContent = parsed.intro;
+    el.appendChild(d);
+  }
+  const corr = parsed.blocks.filter(b => b.correct);
+  const inc = parsed.blocks.filter(b => !b.correct);
+  corr.forEach(b => el.appendChild(buildExpBlock(b, true)));
+  if (inc.length) {
+    const h = document.createElement('div');
+    h.className = 'exp-sub';
+    h.textContent = 'Why the other options are incorrect';
+    el.appendChild(h);
+    inc.forEach(b => el.appendChild(buildExpBlock(b, false)));
+  }
 }
 
 function selectChoice(letter) {
@@ -942,7 +1064,7 @@ function adpSubmitAnswer() {
     else if (isS&&!isC) d.classList.add('wrong');
     else if (isC) d.classList.add('show-correct');
   });
-  document.getElementById('explanationText').textContent=q.explanation||'';
+  renderExplanation(q);
   document.getElementById('explanation').classList.add('visible');
   const btn=document.getElementById('adpActionBtn');
   btn.textContent=wasOk?'Correct! Next →':'Wrong. Next →';
